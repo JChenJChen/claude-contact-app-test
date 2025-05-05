@@ -1,0 +1,89 @@
+services:
+    db:
+        image: mysql:8.0
+        container_name: mysql_db
+        volumes:
+            - mysql_data:/var/lib/mysql
+        environment:
+            - MYSQL_ROOT_PASSWORD=yourpassword
+            - MYSQL_DATABASE=contacts_db
+            - MYSQL_USER=app
+            - MYSQL_PASSWORD=yourpassword
+        ports:
+            # - "13306:3306"
+            - "3306:3306"
+        networks:
+            - laravel
+
+    app:
+        build:
+            context: .
+            dockerfile: .dev-ops/php-app/Dockerfile
+        container_name: laravel_app
+        working_dir: /var/www/html
+        volumes:
+            - ./:/var/www/html
+            - /var/www/html/vendor
+        networks:
+            - laravel
+        depends_on:
+            - redis
+            - db
+        ports:
+            - "9000:9000"
+
+    queue_worker:
+        build:
+            context: .
+            dockerfile: .dev-ops/queue_worker/Dockerfile
+        container_name: laravel_queue_worker
+        working_dir: /var/www/html
+        volumes:
+            - ./:/var/www/html
+        env_file:
+            - ./.env
+        networks:
+            - laravel
+        environment:
+            - APP_ENV=local
+            - APP_DEBUG=true
+            - APP_KEY=${APP_KEY}
+            - DB_CONNECTION=mysql
+            - DB_HOST=db
+            - DB_PORT=3306
+            - DB_DATABASE=${DB_DATABASE}
+            - DB_USERNAME=${DB_USERNAME}
+            - DB_PASSWORD=${DB_PASSWORD}
+        depends_on:
+            - db
+            - app
+            - redis
+
+    redis:
+        image: redis:alpine
+        container_name: redis
+        networks:
+            - laravel
+        ports:
+            - "6379:6379"
+
+    webserver:
+        image: nginx:alpine
+        container_name: nginx_web
+        ports:
+            - "8080:80"
+        volumes:
+            - ./:/var/www/html
+            - .dev-ops/nginx/default.conf:/etc/nginx/conf.d/default.conf
+        depends_on:
+            - db
+            - app
+        networks:
+            - laravel
+
+networks:
+    laravel:
+
+volumes:
+    mysql_data:
+    laravel_app_data:
